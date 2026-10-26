@@ -14,6 +14,16 @@ val gitCommitSha: String = try {
     "unknown"
 }
 
+// CI can supply a monotonically increasing versionCode for installable updates.
+val ciVersionCode = providers.gradleProperty("ciVersionCode").orNull?.toIntOrNull()
+
+// Release signing is configured only when all four values are available.
+// CI restores the keystore from Actions Secrets to a runner-temporary location.
+val ciSigningStoreFile = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+val ciSigningStorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
+val ciSigningKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
+val ciSigningKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+
 val buildTime: String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").apply {
     timeZone = TimeZone.getTimeZone("UTC")
 }.format(Date())
@@ -26,7 +36,7 @@ android {
         applicationId = "com.taiwanfreetv.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 6
+        versionCode = ciVersionCode ?: 6
         versionName = "1.0.5"
 
         buildConfigField("String", "GIT_COMMIT_SHA", "\"$gitCommitSha\"")
@@ -38,8 +48,26 @@ android {
         }
     }
 
+    signingConfigs {
+        if (listOf(
+                ciSigningStoreFile,
+                ciSigningStorePassword,
+                ciSigningKeyAlias,
+                ciSigningKeyPassword
+            ).all { !it.isNullOrBlank() }
+        ) {
+            create("ciRelease") {
+                storeFile = file(requireNotNull(ciSigningStoreFile))
+                storePassword = ciSigningStorePassword
+                keyAlias = ciSigningKeyAlias
+                keyPassword = ciSigningKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            // No debug-key fallback: CI requires a properly signed Release APK.
+            signingConfigs.findByName("ciRelease")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

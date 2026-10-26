@@ -7,3 +7,7 @@ app/build/
 local.properties
 *.apk
 *.aar
+*.jks
+*.keystore
+*.p12
+*.pem

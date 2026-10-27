@@ -85,9 +85,9 @@ jobs:
           apk="app/build/outputs/apk/release/app-release.apk"
           sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           apksigner="$(find "$sdk_root/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          aapt="$(find "$sdk_root/build-tools" -type f -name aapt | sort -V | tail -n 1)"
+          aapt2="$(find "$sdk_root/build-tools" -type f -name aapt2 | sort -V | tail -n 1)"
           test -x "$apksigner"
-          test -x "$aapt"
+          test -x "$aapt2"
           "$apksigner" verify --verbose "$apk"
           # Read the entire output instead of short-circuiting a pipeline with
           # pipefail enabled, which can cause SIGPIPE and a false build failure.
@@ -98,10 +98,11 @@ jobs:
             printf '%s\n' "$cert_output"
             exit 1
           fi
-          badging="$("$aapt" dump badging "$apk")"
-          if [[ "$badging" != *"package: name='com.taiwanfreetv.app'"* ]]; then
-            echo "::error::The APK package ID does not match com.taiwanfreetv.app"
-            printf '%s\n' "$badging" | sed -n '1,8p'
+          # aapt dump badging tries to resolve framework icon resources and can
+          # fail even for a valid APK. aapt2 packagename reads only the manifest.
+          package_name="$("$aapt2" dump packagename "$apk")"
+          if [[ "$package_name" != "com.taiwanfreetv.app" ]]; then
+            echo "::error::Unexpected APK package ID: $package_name"
             exit 1
           fi
           echo "SIGNER_SHA256=$signer_sha256" >> "$GITHUB_ENV"
